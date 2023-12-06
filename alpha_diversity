@@ -1,0 +1,234 @@
+#### alpha diversities from 16S amplicon sequencing
+
+setwd(working_directory)
+
+# load libraries
+library(readr)
+library(knitr)
+library(phyloseq)
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(ggplot2)
+library(ggprism)
+library(microbiome)
+library(patchwork)
+
+# starting with a phyloseq object
+# load data
+ps <- readRDS("ps_rarefied.rds")
+ps
+
+# obtain alpha diversity metrics from the phyloseq object
+tab <-microbiome::alpha(ps, index = "all")
+kable(head(tab))
+
+# get metadata from phyloseq object
+ps1.meta <- meta(ps)
+kable(head(ps1.meta))
+
+# add alpha diversity metrics to metadata
+ps1.meta$Shannon <- tab$diversity_shannon
+ps1.meta$InverseSimpson <- tab$diversity_inverse_simpson
+ps1.meta$Chao <- tab$chao1
+ps1.meta$Observed <- tab$observed
+kable(head(ps1.meta))
+
+# transform DAy to factor and remove animal IDs from animals that were removed from the trial
+ps1.meta$day <- factor(ps1.meta$day) 
+ps1.meta <- ps1.meta %>%
+  subset(!(animal_id %in% c("241", "218")))
+
+#### test for normallity of the data
+
+alpha <- ps1.meta
+
+# Shannon index
+# set up plot layout
+layout(matrix(c(1,2,3,4),2,2))
+# create a histogram and density plot
+hist(alpha$Shannon, main = "Shannon Index")
+plot(density(alpha$Shannon), main = "Shannon Index")
+# create a QQ plot
+qqnorm(alpha$Shannon)
+qqline(alpha$Shannon)
+# conduct a Shapiro-Wilk test
+test_output <- shapiro.test(alpha$Shannon)
+mtext(paste0("Shapiro-Wilk test p-value: ", 
+             signif(test_output$p.value, digits = 3)),side = 1, line = 12)
+
+# observed ASVs
+# set up plot layout
+layout(matrix(c(1,2,3,4),2,2))
+# create a histogram and density plot
+hist(alpha$Observed, main = "Observed ASVs")
+plot(density(alpha$Observed), main = "Observed ASVs")
+# create a QQ plot
+qqnorm(alpha$Observed)
+qqline(alpha$Observed)
+# conduct a Shapiro-Wilk test
+test_output <- shapiro.test(alpha$Observed)
+mtext(paste0("Shapiro-Wilk test p-value: ", 
+             signif(test_output$p.value, digits = 3)), side = 1, line = 12)
+
+# Inverse Simpson
+# set up plot layout
+layout(matrix(c(1,2,3,4),2,2))
+# create a histogram and density plot
+hist(alpha$InverseSimpson, main = "Inverse Simpson")
+plot(density(alpha$InverseSimpson), main = "Inverse Simpson")
+# create a QQ plot
+qqnorm(alpha$InverseSimpson)
+qqline(alpha$InverseSimpson)
+# conduct a Shapiro-Wilk test
+test_output <- shapiro.test(alpha$InverseSimpson)
+mtext(paste0("Shapiro-Wilk test p-value: ", 
+             signif(test_output$p.value, digits = 3)),  side = 1, line = 12)
+
+# subset data by sampling day
+alpha_neg1 <- subset(alpha, day == "Day -1")
+alpha_1 <- subset(alpha, day == "Day 01")
+alpha_2 <- subset(alpha, day == "Day 02")
+alpha_7 <- subset(alpha, day == "Day 07")
+alpha_14 <- subset(alpha, day == "Day 14")
+alpha_28 <- subset(alpha, day == "Day 28")
+alpha_42 <- subset(alpha, day == "Day 42")
+
+# Run a non-parametric test, the Wilcoxon rank-sum test (Mann-Whitney):
+
+# Observed ASVs
+neg1_obs <- pairwise.wilcox.test(alpha_neg1$Observed, alpha_neg1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day1_obs <- pairwise.wilcox.test(alpha_1$Observed, alpha_1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day2_obs <- pairwise.wilcox.test(alpha_2$Observed, alpha_2$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day7_obs <- pairwise.wilcox.test(alpha_7$Observed, alpha_7$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day14_obs <- pairwise.wilcox.test(alpha_14$Observed, alpha_14$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day28_obs <- pairwise.wilcox.test(alpha_28$Observed, alpha_28$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day421_obs <- pairwise.wilcox.test(alpha_42$Observed, alpha_42$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+
+# Shannon
+neg1_sha <- pairwise.wilcox.test(alpha_neg1$Shannon, alpha_neg1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day1_sha <- pairwise.wilcox.test(alpha_1$Shannon, alpha_1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day2_sha <- pairwise.wilcox.test(alpha_2$Shannon, alpha_2$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day7_sha <- pairwise.wilcox.test(alpha_7$Shannon, alpha_7$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day14_sha <- pairwise.wilcox.test(alpha_14$Shannon, alpha_14$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day28_sha <- pairwise.wilcox.test(alpha_28$Shannon, alpha_28$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day42_sha <- pairwise.wilcox.test(alpha_42$Shannon, alpha_42$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+
+# Inverse Simpson
+neg1_invsim <- pairwise.wilcox.test(alpha_neg1$InverseSimpson, alpha_neg1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day1_invsim <- pairwise.wilcox.test(alpha_1$InverseSimpson, alpha_1$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day2_invsim <- pairwise.wilcox.test(alpha_2$InverseSimpson, alpha_2$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day7_invsim <- pairwise.wilcox.test(alpha_7$InverseSimpson, alpha_7$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day14_invsim <- pairwise.wilcox.test(alpha_14$InverseSimpson, alpha_14$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day28_invsim <- pairwise.wilcox.test(alpha_28$InverseSimpson, alpha_28$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+day42_invsim <- pairwise.wilcox.test(alpha_42$InverseSimpson, alpha_42$treatment, p.adjust.method = "bonferroni", exact = FALSE)
+
+# create a table for the model outputs
+results_df <- data.frame(alpha_div_metric = character(), day = integer(),
+                         p_value = numeric(), stringsAsFactors = FALSE)
+
+# add the results for Observed ASVs
+results_df <- rbind(results_df, data.frame(alpha_div_metric = "Observed",
+                               day = c(-1, 1, 2, 7, 14, 28, 42),
+                               p_value = c(neg1_obs$p.value, day1_obs$p.value, 
+                                           day2_obs$p.value, day7_obs$p.value, 
+                                           day14_obs$p.value, day28_obs$p.value, 
+                                           day421_obs$p.value)))
+
+# add the results for Shannon
+results_df <- rbind(results_df, data.frame(alpha_div_metric = "Shannon",
+                               day = c(-1, 1, 2, 7, 14, 28, 42),
+                               p_value = c(neg1_sha$p.value, day1_sha$p.value, 
+                                           day2_sha$p.value, day7_sha$p.value, 
+                                           day14_sha$p.value, day28_sha$p.value, 
+                                           day42_sha$p.value)))
+
+# add the results for Inverse Simpson
+results_df <- rbind(results_df, data.frame(alpha_div_metric = "InverseSimpson",
+                               day = c(-1, 1, 2, 7, 14, 28, 42),
+                               p_value = c(neg1_invsim$p.value, day1_invsim$p.value, 
+                                           day2_invsim$p.value, day7_invsim$p.value, 
+                                           day14_invsim$p.value, day28_invsim$p.value, 
+                                           day42_invsim$p.value)))
+results_df
+
+# create individual plots for each alpha diversity metrics. First a line plot, then a boxplot
+
+# Shannon
+shannon_plot2 <- ggplot(ps1.meta, 
+                        aes(x = factor(day), y = Shannon, fill = treatment)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=c("red", "steelblue"), 
+                    name = "Treatment",
+                    labels = c("Control", "EO")) + 
+  theme_prism(base_size = 22) + 
+  theme(legend.title = element_text()) +
+  labs(x = "", y = "Shannon Index")
+shannon_plot2
+ggsave(shannon_plot2, 
+       filename = "shannon_plot.tiff", 
+       device = "tiff", width = 2000, height = 1500, dpi = 150, units = "px", bg = NULL)
+
+# Inverse Simpson
+invsimpson_plot2 <- ggplot(ps1.meta, 
+                           aes(x = factor(day), y = InverseSimpson, fill = treatment)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=c("red", "steelblue"), 
+                    name = "Treatment",
+                    labels = c("Control", "EO")) + 
+  theme_prism(base_size = 22) + 
+  theme(legend.title = element_text()) +
+  labs(x = "", y = "Inverse Simpson Index")
+invsimpson_plot2
+ggsave(invsimpson_plot2, 
+       filename = "invsimpson_plot.tiff", 
+       device = "tiff", width = 2000, height = 1500, dpi = 150, units = "px", bg = NULL)
+
+# Observed ASVs
+obs_plot2 <- ggplot(ps1.meta, 
+                    aes(x = factor(day), y = Observed, fill = treatment)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=c("red", "steelblue"), 
+                    name = "Treatment",
+                    labels = c("Control", "EO")) + 
+  theme_prism(base_size = 22) + 
+  theme(legend.title = element_text()) +
+  labs(x = "", y = "Observed ASVs")
+obs_plot2
+ggsave(obs_plot2, 
+       filename = "obs_plot.tiff", 
+       device = "tiff", width = 2000, height = 1500, dpi = 150, units = "px", bg = NULL)
+
+# combine plots into one figure
+
+# Modify obs_plot, shannon_plot, chao_plot, and invsimpson_plot to remove x-axis labels
+
+# lineplot
+obs_plot1.2 <- obs_plot + theme(axis.text.x = element_blank(), legend.position = "none")
+shannon_plot1.2 <- shannon_plot + theme(axis.text.x = element_blank(), legend.position = "none")
+invsimpson_plot1.2 <- invsimpson_plot + theme(axis.text.x = element_blank(), legend.position = "none")
+# boxplot
+obs_plot2.2 <- obs_plot2 + theme(axis.text.x = element_blank(), legend.position = "none")
+shannon_plot2.2 <- shannon_plot2 + theme(axis.text.x = element_blank(), legend.position = "none")
+invsimpson_plot2.2 <- invsimpson_plot2 + theme(axis.text.x = element_blank(), legend.position = "none")
+
+comb_plot2 <- (obs_plot2.2 + shannon_plot2.2 + invsimpson_plot2.2 + chao_plot2) +
+  plot_layout(ncol = 1, heights = c(10, 10, 10, 10)) +
+  plot_annotation(
+    title = "Alpha diversity indices",
+    tag_levels = "A",
+    theme = theme(plot.title = element_text(hjust = 0.5))
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 25),
+    legend.text = element_text(size = 22, face = "bold"),
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"),
+    plot.title = element_text(size = 25, face = "bold")
+  )
+comb_plot2
+ggsave(comb_plot2, 
+       filename = "alpha_boxplot.tiff", 
+       device = "tiff", width = 2500, height = 4000, dpi = 200, units = "px", bg = NULL)
+
