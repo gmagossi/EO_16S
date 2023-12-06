@@ -1,0 +1,49 @@
+#### network analysis
+
+setwd(working_directory)
+
+# load libraries
+library(Maaslin2)
+library(beemStatic)
+library(ggraph)
+library(SpiecEasi)
+library(pROC)
+library(phyloseq)
+library(qgraph)
+library(Matrix)
+library(dplyr)
+
+# inport data
+input_data = read.table(file = "genus_o_meta.txt", header = TRUE, sep = "\t",row.names = 1,  stringsAsFactors = FALSE)
+head (input_data)
+input_metadata = read.table(file = "metadata_ess.txt", header = TRUE, sep = "\t",row.names = 1,stringsAsFactors = FALSE)
+head(input_metadata)
+input_data
+
+# Fit the model using Maaslin2
+fit_data <- Maaslin2(
+  input_data, input_metadata, 'diet_day_treatment',
+  fixed_effects = c("diet", "day", "treatment"),
+  reference = c("diet", "N", "day", "day-1"),
+  random_effects = c("animal_id"),
+  max_significance = 0.05,
+  normalization = 'None',
+  standardize = TRUE
+)
+
+#Read in the data
+data1<-read.csv("eo.csv", header = T, row.names = 1)
+head (data1)
+
+eo<-func.EM(data1, ncpu=20, scaling=median(biomass.true), max.iter=100, epsilon = 1e-4)
+
+diagnoseFit(eo, data1, annotate = FALSE)
+#Visualize the correlation between the BEEM biomass estimation and True biomass
+diagnoseBiomass(eo,true.biomass = biomass.true)
+plot(beem2biomass(eo), xlab='BEEM biomass estimation', ylab='True biomass')
+
+#Plots
+EO<-showInteraction(eo,data1)
+#Save the plot
+ggsave("essential_oil_networkplot.tiff", EO, width = 16, height = 6, dpi = 300)
+
