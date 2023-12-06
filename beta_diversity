@@ -1,0 +1,103 @@
+#### beta diversity and PERMANOVA 
+
+# Load libraries
+library(microbiome)
+library(ggplot2)
+library(dplyr)
+library(vegan)
+library(phyloseq)
+
+setwd(working_directory)
+
+# load phyloseq object
+ps <- readRDS("ps_rarefied.rds")
+ps
+
+# subset phyloseq object per day
+ps1 <- subset_samples(ps, day=="Day -1")
+ps2 <- subset_samples(ps, day=="Day 01")
+ps3 <- subset_samples(ps, day=="Day 02")
+ps4 <- subset_samples(ps, day=="Day 07")
+ps5 <- subset_samples(ps, day=="Day 14")
+ps6 <- subset_samples(ps, day=="Day 28")
+ps7 <- subset_samples(ps, day=="Day 42")
+
+# Pick relative abundances (compositional) and sample metadata 
+pseq.rel <- microbiome::transform(ps, "compositional")
+otu <- abundances(pseq.rel)
+meta <- meta(pseq.rel)
+
+# repeat for individual days
+pseq.rel1 <- microbiome::transform(ps1, "compositional")
+otu1 <- abundances(pseq.rel1)
+meta1 <- meta(pseq.rel1)
+pseq.rel2 <- microbiome::transform(ps2, "compositional")
+otu2 <- abundances(pseq.rel2)
+meta2 <- meta(pseq.rel2)
+pseq.rel3 <- microbiome::transform(ps3, "compositional")
+otu3 <- abundances(pseq.rel3)
+meta3 <- meta(pseq.rel3)
+pseq.rel4 <- microbiome::transform(ps4, "compositional")
+otu4 <- abundances(pseq.rel4)
+meta4 <- meta(pseq.rel4)
+pseq.rel5 <- microbiome::transform(ps5, "compositional")
+otu5 <- abundances(pseq.rel5)
+meta5 <- meta(pseq.rel5)
+pseq.rel6 <- microbiome::transform(ps6, "compositional")
+otu6 <- abundances(pseq.rel6)
+meta6 <- meta(pseq.rel6)
+pseq.rel7 <- microbiome::transform(ps7, "compositional")
+otu7 <- abundances(pseq.rel7)
+meta7 <- meta(pseq.rel7)
+
+# PERMANOVA significance test for group-level differences
+
+# PERMANOVA treatment
+permanova.trt <- adonis2(t(otu) ~ treatment, data = meta, permutations=999, method = "bray")
+permanova.trt
+permanova.trt.day <- adonis2(t(otu) ~ treatment * day, data = meta, permutations=999, method = "bray")
+permanova.trt.day
+# PERMANOVA day
+permanova.day <- adonis2(t(otu) ~ day, data = meta, permutations=999, method = "bray")
+permanova.day
+# PERMANOVA treatment in each day
+permanova.d_1 <- adonis2(t(otu1) ~ treatment, data = meta1, permutations=999, method = "bray")
+permanova.d_1
+permanova.d1 <- adonis2(t(otu2) ~ treatment, data = meta2, permutations=999, method = "bray")
+permanova.d1
+permanova.d2 <- adonis2(t(otu3) ~ treatment, data = meta3, permutations=999, method = "bray")
+permanova.d2
+permanova.d7 <- adonis2(t(otu4) ~ treatment, data = meta4, permutations=999, method = "bray")
+permanova.d7
+permanova.d14 <- adonis2(t(otu5) ~ treatment, data = meta5, permutations=999, method = "bray")
+permanova.d14
+permanova.d28 <- adonis2(t(otu6) ~ treatment, data = meta6, permutations=999, method = "bray")
+permanova.d28
+permanova.d42 <- adonis2(t(otu7) ~ treatment, data = meta7, permutations=999, method = "bray")
+permanova.d42
+
+#### plot beta diversity
+
+# Transform and plot NMDS of treatment 
+ps.prop <- transform_sample_counts(ps, function(otu) otu/sum(otu))
+ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
+plot_ord.trt <- plot_ordination(ps.prop, ord.nmds.bray, color="treatment") + 
+  theme_prism() + geom_point(aes(color = treatment), alpha = 0.7, size = 2) + 
+  scale_color_manual(values=c("red", "steelblue"), labels=c("Control", "EO")) + 
+  labs(color = "Treatment") + theme(text = element_text(size = 20))
+plot_ord.trt
+
+# save file 
+ggsave(plot_ord.trt , filename = "NMDS_bray_trt_plot.tiff", device = "tiff", 
+width = 6000, height = 4500, dpi = 300, units = "px", bg = NULL)
+
+# Plot NMDS of day
+days_plot <- plot_ordination(physeq = ps, ordination = ord.nmds.bray, color = "treatment") +
+  geom_point(aes(color = treatment), size = 2.5) + geom_point(size = 1.0) + theme_bw() + 
+  facet_wrap(~day, ncol = 7)+ labs(color = "Treatment") + theme(text = element_text(size = 17)) + 
+  scale_color_manual(values=c("red", "steelblue"), labels=c("Control", "EO"))
+days_plot
+
+# Save file
+ggsave(days_plot , filename = "NMDS_bray_days_plot.tiff", device = "tiff", 
+width = 6000, height = 4500, dpi = 300, units = "px", bg = NULL)
