@@ -1,0 +1,309 @@
+#### determining relative abundances of taxa from a phyloseq object
+# taxonomy levels: Phylum, family, and genus
+
+setwd("working_directory)
+
+# input file is a phyloseq object (from decontam, clean up, no singletons, and rarefied)
+ps <- readRDS("ps_rarefied.rds")
+ps
+metadata <- read.csv("metafile.csv", header=T, row.names=1)
+head(metadata); dim(metadata); class(metadata)# should be data frame 
+# removing the control samples C1 and C2 (after decontam)
+metadata <- metadata[-c(1:2),]
+
+# load libraries
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("phyloseq", force = TRUE)
+library(Biostrings); packageVersion("Biostrings")
+library(phyloseq)
+library(dplyr)
+library(reshape)
+library(tidyverse)
+library(vegan)
+
+
+# transform sample counts
+ps_trans <- transform_sample_counts(ps, function(x) x/sum(x))
+ps_trans
+saveRDS(ps_trans, file="ps_trans.rds")
+
+# Create genus level summary
+ps_genus <- tax_glom(ps_trans, taxrank = 'Genus', NArm = FALSE, bad_empty=c(NA, "", " ", "\t"))
+ps_genus_rel = transform_sample_counts(ps_genus, function(x) x/sum(x)*100)
+dat <- psmelt(ps_genus_rel)
+dat$Genus<- as.character(dat$Genus)
+genus_abundance <- aggregate(Abundance ~ Sample + Genus, dat, FUN = sum)
+genus_abundance <- cast(genus_abundance, Sample ~ Genus)
+# Make sure the columns to use for the merge are identical
+identical(sort(samdf2$Description), sort(genus_abundance$Sample)) # should be true 
+genus_abundance_with_metadata <- merge(metadata, genus_abundance, by.x = "Description", by.y = "Sample")
+# export
+write.csv(genus_abundance_with_metadata, file="genus_summary_with_metadata.csv")
+
+#Create family level summaries 
+ps_family <- tax_glom(ps_trans, taxrank = 'Family', NArm = FALSE, bad_empty = c(NA, "", " ", "\t"))
+ps_family_rel = transform_sample_counts(ps_family, function(x) x/sum(x)*100)
+datf <- psmelt(ps_family_rel)
+datf$Family <- as.character(datf$Family)
+family_abundance <- aggregate(Abundance ~ Sample + Family, datf, FUN = sum)
+family_abundance <- cast(family_abundance, Sample ~ Family)
+# Make sure the columns to use for the merge are identical
+identical( sort(samdf2$Description), sort(family_abundance$Sample))
+family_abundance_with_metadata <- merge(metadata, family_abundance, by.x = "Description", by.y = "Sample")
+# export
+write.csv(family_abundance_with_metadata, file="10132022_family_summary_with_metadata_dv.csv")
+
+#Create phylum level summaries
+ps_phylum <- tax_glom(ps_trans, taxrank = 'Phylum', NArm = FALSE, bad_empty = c(NA, "", " ", "\t"))
+ps_phylum_rel = transform_sample_counts(ps_phylum, function(x) x/sum(x)*100)
+datphy <- psmelt(ps_phylum_rel)
+datphy$Phylum <- as.character(datphy$Phylum)
+phylum_abundance <- aggregate(Abundance ~ Sample + Phylum, datf, FUN = sum)
+phylum_abundance <- cast(phylum_abundance, Sample ~ Phylum)
+# Make sure the columns to use for the merge are identical
+identical( sort(samdf2$Description), sort(phylum_abundance$Sample))
+phylum_abundance_with_metadata <- merge(metadata, phylum_abundance, by.x = "Description", by.y = "Sample")
+# export
+write.csv(phylum_abundance_with_metadata, file = "phylum_summary_with_metadata.csv")
+
+#### plotting the relative abundance
+
+# Load libraries
+library(magrittr)
+library(dplyr)
+library(tibble)
+library(phyloseq)
+library(tibble)
+library(tidyr)
+library(ggplot2)
+library(ggprism)
+library(ggtext)
+library(forcats)
+library(tidyverse)
+library(broom)
+library(lme4)
+library(broom.mixed)
+library(RColorBrewer)
+
+# assign metadata, taxonomy, and ASV count data from phyloseq object
+taxonomy <- as.data.frame(tax_table(ps_trans))
+otu_count <- as.data.frame(otu_table(ps_trans))
+metadata <- (sample_data(ps_trans))
+metadata <- as.matrix(metadata)
+metadata <- as.data.frame(metadata)
+metadata <- rownames_to_column(metadata, "sample_id")
+head(metadata)
+
+# manipulate tables for plotting
+otu_count2 <- rownames_to_column(otu_count, var = "sample_id") %>% 
+  as_tibble() %>% pivot_longer(-sample_id, names_to = "otu", values_to = "count")
+head(otu_count2)
+taxonomy <- as.data.frame(as.matrix(taxonomy))
+taxonomy <- rownames_to_column(taxonomy, var = "otu")
+head(taxonomy)
+# merge metadata and ASV count and taxonomy by sample ID
+inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu")
+megadata.otu.tax <- inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu")
+inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu") %>%
+  group_by(sample_id) %>%
+  mutate(rel_abund = count / sum(count))
+megadata.otu.tax.relabund <- inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu") %>%
+  group_by(sample_id) %>%
+  mutate(rel_abund = count / sum(count))
+# save file
+saveRDS(megadata.otu.tax, file = "megadata_otu_taxonomy")
+# obtain relative abundance of taxa
+megadata.otu.tax.relabund <- inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu") %>%
+  group_by(sample_id) %>%
+  mutate(rel_abund = count / sum(count))
+# check that rel abundances add up to 100
+megadata.otu.tax.relabund %>%
+  group_by(sample_id) %>%
+  summarize(total = sum(rel_abund))
+# save file
+saveRDS(megadata.otu.tax.relabund, file = "megadata_otu_taxonomy_rel_abund")
+otu_rel_abund <- inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu") %>%
+  group_by(sample_id) %>%
+  mutate(rel_abund = count / sum(count)) %>%
+  ungroup() %>%
+  select(-count) %>%
+  pivot_longer(cols = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "otu"),
+               names_to = "level",
+               values_to = "taxon")
+otu_rel_abund
+otu_rel_abund <- inner_join(metadata, otu_count2, by = "sample_id") %>%
+  inner_join(., taxonomy, by = "otu") %>%
+  group_by(sample_id) %>%
+  mutate(rel_abund = count / sum(count)) %>%
+  ungroup() %>%
+  select(-count) %>%
+  pivot_longer(c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"),
+               names_to = "level",
+               values_to = "taxon")
+
+# Combining treatment and day into new colum
+otu_rel_abund$trt <- paste(otu_rel_abund$day, otu_rel_abund$treatment)
+otu_rel_abund
+# save file
+saveRDS(otu_rel_abund, file = "otu_rel_abund")
+
+# summarize data by Phylum
+otu_rel_abund %>%
+  filter(level == "Phylum") %>%
+  group_by(sample_id, taxon, trt) %>%
+  summarize(rel_abund = sum(rel_abund), .groups = "drop") %>%
+  group_by(trt, taxon) %>% 
+  summarize(mean_rel_abund = mean(rel_abund), .groups = "drop")
+
+otu_rel_abund$trt <- paste(otu_rel_abund$day, otu_rel_abund$treatment)
+otu_rel_abund %>%
+  mutate(trt = factor(trt, levels = c("Day -1 CTRL", "Day -1 EO", "Day 01 CTRL", "Day 01 EO", "Day 02 CTRL", 
+      "Day 02 EO", "Day 07 CTRL", "Day 07 EO", "Day 14 CTRL", "Day 14 EO", "Day 28 CTRL", "Day 28 EO", "Day 42 CTRL", "Day 42 EO")))
+
+taxon_rel_abund <- otu_rel_abund %>%
+  filter(level == "Phylum") %>%
+  group_by(trt, sample_id, taxon) %>%
+  summarize(rel_abund = sum(rel_abund), .groups = "drop") %>%
+  group_by(trt, taxon) %>% 
+  summarize(mean_rel_abund = 100*mean(rel_abund), .groups = "drop")
+taxon_rel_abund %>%
+  group_by(taxon) %>%
+  summarize(max=max(mean_rel_abund)) %>%
+  arrange(desc(max))
+taxon_pool <- taxon_rel_abund %>%
+  group_by(taxon) %>%
+  summarize(pool = max(mean_rel_abund) <1, .groups="drop")
+inner_join(taxon_rel_abund, taxon_pool, by = "taxon") %>%
+  mutate(taxon = if_else(pool, "Other", taxon))
+inner_join(taxon_rel_abund, taxon_pool, by = "taxon") %>%
+  mutate(taxon = if_else(pool, "Other", taxon)) %>%
+  group_by(trt, taxon) %>%
+  summarize(mean_rel_abund = sum(mean_rel_abund))
+
+# plot phylum level
+phy.plot <- inner_join(taxon_rel_abund, taxon_pool, by = "taxon") %>%
+  mutate(taxon = if_else(pool, "Other", taxon)) %>%
+  group_by(trt, taxon) %>%
+  summarize(mean_rel_abund = sum(mean_rel_abund),
+            mean = sum(mean),
+            .groups = "drop") %>%
+  mutate(taxon = factor(taxon),
+         taxon = fct_reorder(taxon, mean, .desc = TRUE),
+         taxon = fct_shift(taxon, n=1)) %>%
+  ggplot(aes(x = trt, y = mean_rel_abund, fill = taxon)) +
+  geom_col() + labs(x=NULL, y="Mean Relative Abundance (%)") + theme_prism() +
+  scale_fill_manual(name = NULL, 
+                    breaks = c("Actinobacteriota", "Bacteroidota", "Firmicutes", 
+                               "Fusobacteriota", "Proteobacteria", "Verrucomicrobiota", 
+                               "Other"), values = c("darkcyan", "tomato1", "lightslateblue",
+                                                    "magenta2", "royalblue3", "yellow2", "grey")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1),
+        legend.text = element_text(face="italic")) +
+  scale_y_continuous(expand=c(0,0)) +
+  scale_x_discrete(breaks = c("Day -1 CTRL", "Day -1 EO", "Day 01 CTRL", "Day 01 EO", "Day 02 CTRL", "Day 02 EO", 
+      "Day 07 CTRL", "Day 07 EO", "Day 14 CTRL", "Day 14 EO", "Day 28 CTRL", "Day 28 EO", "Day 42 CTRL", "Day 42 EO"), 
+      labels = c("Day -1 Control", "Day -1 EO", "Day 01 Control", "Day 01 EO", "Day 02 Control", "Day 02 EO", "Day 07 Control", 
+      "Day 07 EO", "Day 14 Control", "Day 14 EO", "Day 28 Control", "Day 28 EO", "Day 42 Control", "Day 42 EO")) + 
+  theme(text = element_text(size = 15, color = "black"))
+phy.plot
+ggsave(phy.plot, filename = "top_phylum_plot.tiff", device = "tiff", 
+      width = 4000, height = 3000, dpi = 600, units = "px", bg = NULL)
+
+# Repeat analysis for Family level using relative abundance higher than 8%
+taxon_rel_abund <- otu_rel_abund %>%
+  filter(level == "Family") %>%
+  group_by(trt, sample_id, taxon) %>%
+  summarize(rel_abund = sum(rel_abund), .groups = "drop") %>%
+  group_by(trt, taxon) %>% 
+  summarize(mean_rel_abund = 100*mean(rel_abund), .groups = "drop")
+taxon_rel_abund
+taxon_pool <- taxon_rel_abund %>%
+  group_by(taxon) %>%
+  summarize(pool = max(mean_rel_abund) <8, 
+            mean = mean(mean_rel_abund),
+            .groups="drop")
+taxon_pool
+
+# Plot top taxa at the family level
+fam_plot <- inner_join(taxon_rel_abund, taxon_pool, by = "taxon") %>%
+  mutate(taxon = if_else(pool, "Other", taxon)) %>%
+  group_by(trt, taxon) %>%
+  summarize(mean_rel_abund = sum(mean_rel_abund),
+            mean = sum(mean),
+            .groups = "drop") %>%
+  mutate(taxon = factor(taxon),
+         taxon = fct_reorder(taxon, mean, .desc = TRUE),
+         taxon = fct_shift(taxon, n=1)) %>%
+  ggplot(aes(x = trt, y = mean_rel_abund, fill = taxon)) +
+  geom_col() + labs(x=NULL, y="Mean Relative Abundance (%)") + theme_prism() +
+  scale_fill_manual(name = NULL, 
+                    breaks = c("Burkholderiaceae", "Chitinophagaceae", "Microbacteriaceae", 
+                               "Moraxellaceae", "Mycoplasmataceae", "Pasteurellaceae",
+                               "Pseudomonadaceae", "Other"), 
+                    values = c(brewer.pal(7, "Dark2"), "grey")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1),
+        legend.text = element_text(face="italic")) +
+  scale_y_continuous(expand=c(0,0)) +
+  scale_x_discrete(breaks = c("Day -1 CTRL", "Day -1 EO", "Day 01 CTRL", "Day 01 EO", "Day 02 CTRL", 
+      "Day 02 EO", "Day 07 CTRL", "Day 07 EO", "Day 14 CTRL", "Day 14 EO", "Day 28 CTRL", "Day 28 EO", 
+      "Day 42 CTRL", "Day 42 EO"), labels = c("Day -1 Control", "Day -1 EO", "Day 01 Control", "Day 01 EO", 
+      "Day 02 Control", "Day 02 EO", "Day 07 Control", "Day 07 EO", "Day 14 Control", "Day 14 EO", "Day 28 Control", 
+      "Day 28 EO", "Day 42 Control", "Day 42 EO")) + 
+  theme(text = element_text(size = 15, color = "black"))
+fam_plot
+ggsave(fam_plot, filename = "top_family_plot.tiff", device = "tiff", 
+      width = 4000, height = 3000, dpi = 600, units = "px", bg = NULL)
+
+# Repeat analysis for Genus level using relative abundance higher than 2.5%
+taxon_rel_abund <- otu_rel_abund %>%
+  filter(level == "Genus") %>%
+  group_by(trt, sample_id, taxon) %>%
+  summarize(rel_abund = sum(rel_abund), .groups = "drop") %>%
+  group_by(trt, taxon) %>% 
+  summarize(mean_rel_abund = 100*mean(rel_abund), .groups = "drop") %>%
+  mutate(taxon = replace(taxon, taxon %in% NA, "Other"))
+taxon_rel_abund
+taxon_pool <- taxon_rel_abund %>%
+  group_by(taxon) %>%
+  summarize(pool = max(mean_rel_abund) <2.5, 
+            mean = mean(mean_rel_abund),
+            .groups="drop")
+taxon_pool
+
+# Plot top taxa at the genus level
+genus_plot <- inner_join(taxon_rel_abund, taxon_pool, by = "taxon") %>%
+  mutate(taxon = if_else(pool, "Other", taxon)) %>%
+  group_by(trt, taxon) %>%
+  summarize(mean_rel_abund = sum(mean_rel_abund),
+            mean = sum(mean),
+            .groups = "drop") %>%
+  mutate(taxon = factor(taxon),
+         taxon = fct_reorder(taxon, mean, .desc = TRUE),
+         taxon = fct_shift(taxon, n=1)) %>%
+  ggplot(aes(x = trt, y = mean_rel_abund, fill = taxon)) +
+  geom_col() + labs(x=NULL, y="Mean Relative Abundance (%)") + theme_prism() +
+  scale_fill_manual(name = NULL,
+                    breaks = c("Corynebacterium", "Filobacterium", "Mannheimia",
+                               "Micrococcus", "Moraxella", "Mycoplasma",
+                               "Pasteurella", "Plesiomonas", "Pseudomonas", "Ralstonia", "Other"),
+                    values = c(brewer.pal(8, "Dark2"), "firebrick","darkgreen", "grey")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1),
+        legend.text = element_text(face="italic")) +
+  scale_y_continuous(expand=c(0,0)) +
+  scale_x_discrete(breaks = c("Day -1 CTRL", "Day -1 EO", "Day 01 CTRL", "Day 01 EO", "Day 02 CTRL", 
+      "Day 02 EO", "Day 07 CTRL", "Day 07 EO", "Day 14 CTRL", "Day 14 EO", "Day 28 CTRL", "Day 28 EO", 
+      "Day 42 CTRL", "Day 42 EO"), labels = c("Day -1 Control", "Day -1 EO", "Day 01 Control", "Day 01 EO", 
+      "Day 02 Control", "Day 02 EO", "Day 07 Control", "Day 07 EO", "Day 14 Control", "Day 14 EO", "Day 28 Control", 
+      "Day 28 EO", "Day 42 Control", "Day 42 EO"))
+genus_plot
+
+# save plot
+ggsave(genus_plot, filename = "top_genus_plot.tiff", device = "tiff", 
+      width = 4000, height = 3000, dpi = 600, units = "px", bg = NULL)
